@@ -1,0 +1,83 @@
+{
+  "config": {
+    "seed": 42,
+    "n_sample": 10000,
+    "kutle_kg": 0.15,
+    "ozgul_isi_J_kgK": 460.0,
+    "yuzey_alani_m2": 0.0042,
+    "yayinim": 0.8,
+    "gorus_faktoru": 0.15,
+    "uzay_sicakligi_K": 200.0,
+    "zaman_adimi_s": 15.0,
+    "max_gorev_suresi_s": 10800.0,
+    "basinc_Torr": [
+      1e-06,
+      0.01
+    ],
+    "h_referans_W_m2K": 8.5,
+    "basinc_yarim_Torr": 1.0,
+    "tutma_torku_mNm": 90.0,
+    "kose_frekansi_PPS": 1800.0,
+    "nominal_voltaj_V": 9.0,
+    "tork_derating_1_K": 0.0035,
+    "surtunme_taban_mNm": 4.0,
+    "surtunme_kazanci_mNm": 14.0,
+    "sabit_yuk_mNm": 8.0,
+    "T_sigmoid_merkez_C": 100.0,
+    "T_sigmoid_egim": 4.0,
+    "T_kapi_C": 80.0,
+    "S_sigmoid_merkez": 0.95,
+    "S_sigmoid_egim": 0.07,
+    "S_kapi": 0.75,
+    "V_kritik_V": 5.8,
+    "I_kritik_A": 0.35,
+    "p_voltaj": 0.8,
+    "etiket_gurultusu": 0.05,
+    "termistor_sigma_C": 1.5,
+    "tork_sigma": 0.02,
+    "profil_agirliklari": [
+      0.5,
+      0.2,
+      0.18,
+      0.12
+    ],
+    "profil_adlari": [
+      "Nominal",
+      "Termal_Yuk",
+      "Mekanik_Yuk",
+      "Guc_Anomalisi"
+    ]
+  },
+  "sinif_dagilimi": [
+    6761,
+    1812,
+    816,
+    611
+  ],
+  "profil_dagilimi": [
+    5015,
+    2043,
+    1775,
+    1167
+  ],
+  "etiket_gurultusu_hedef": 500,
+  "etiket_gurultusu_gerceklesen": 371,
+  "bayes_tavani_etiket_gurultusuz": 0.9168,
+  "bayes_tavani_etiket_gurultulu": 0.8834,
+  "sicaklik_C": {
+    "min": -48.8,
+    "max": 289.1,
+    "ort": 48.3
+  },
+  "tork_stres": {
+    "min": 0.147,
+    "max": 2.488,
+    "ort": 0.486
+  },
+  "latent_degiskenler": [
+    "baski_yogunlugu",
+    "yaglayici_bozunmasi",
+    "R_iletim_K_W",
+    "gorev_suresi_s"
+  ]
+}
