@@ -1,0 +1,133 @@
+{
+  "baseline": {
+    "Threshold Rule (deterministic)": {
+      "accuracy": 0.8815,
+      "ci95": [
+        0.8675,
+        0.8955
+      ],
+      "macro_f1": 0.6957,
+      "false_alarm": 0.034,
+      "missed_fault": 0.1235
+    },
+    "Logistic Regression": {
+      "accuracy": 0.784,
+      "ci95": [
+        0.767,
+        0.803
+      ],
+      "macro_f1": 0.6755,
+      "false_alarm": 0.196,
+      "missed_fault": 0.0725
+    },
+    "Decision Tree (d=3)": {
+      "accuracy": 0.8435,
+      "ci95": [
+        0.8285,
+        0.8595
+      ],
+      "macro_f1": 0.7419,
+      "false_alarm": 0.0784,
+      "missed_fault": 0.0849
+    },
+    "Random Forest": {
+      "accuracy": 0.8705,
+      "ci95": [
+        0.8565,
+        0.885
+      ],
+      "macro_f1": 0.7715,
+      "false_alarm": 0.0584,
+      "missed_fault": 0.091
+    }
+  },
+  "mcnemar": {
+    "Threshold Rule (deterministic)": {
+      "only_A_correct": 119,
+      "only_RF_correct": 97,
+      "p_value": 0.153042
+    },
+    "Logistic Regression": {
+      "only_A_correct": 43,
+      "only_RF_correct": 216,
+      "p_value": 0.0
+    },
+    "Decision Tree (d=3)": {
+      "only_A_correct": 26,
+      "only_RF_correct": 80,
+      "p_value": 0.0
+    }
+  },
+  "confusion_matrix": [
+    [
+      1273,
+      12,
+      42,
+      25
+    ],
+    [
+      20,
+      251,
+      88,
+      4
+    ],
+    [
+      22,
+      27,
+      114,
+      0
+    ],
+    [
+      17,
+      1,
+      1,
+      103
+    ]
+  ],
+  "ablation": {
+    "All features": {
+      "accuracy": 0.8705,
+      "macro_f1": 0.7715,
+      "feature_count": 8
+    },
+    "Derived REMOVED": {
+      "accuracy": 0.834,
+      "macro_f1": 0.7075,
+      "feature_count": 6
+    }
+  },
+  "uncertainty_gate": {
+    "0.0": {
+      "suspended_ratio": 0.0,
+      "remaining_accuracy": 0.8705,
+      "suspended_accuracy": null
+    },
+    "0.6": {
+      "suspended_ratio": 0.0905,
+      "remaining_accuracy": 0.9027,
+      "suspended_accuracy": 0.547
+    },
+    "0.7": {
+      "suspended_ratio": 0.1785,
+      "remaining_accuracy": 0.9288,
+      "suspended_accuracy": 0.6022
+    },
+    "0.8": {
+      "suspended_ratio": 0.3745,
+      "remaining_accuracy": 0.9416,
+      "suspended_accuracy": 0.7517
+    },
+    "0.9": {
+      "suspended_ratio": 0.83,
+      "remaining_accuracy": 0.9059,
+      "suspended_accuracy": 0.8633
+    },
+    "0.95": {
+      "suspended_ratio": 0.938,
+      "remaining_accuracy": 0.8952,
+      "suspended_accuracy": 0.8689
+    }
+  },
+  "cv_mean": 0.8764,
+  "cv_std": 0.0094
+}

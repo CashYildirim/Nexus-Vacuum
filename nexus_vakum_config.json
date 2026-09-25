@@ -2,82 +2,82 @@
   "config": {
     "seed": 42,
     "n_sample": 10000,
-    "kutle_kg": 0.15,
-    "ozgul_isi_J_kgK": 460.0,
-    "yuzey_alani_m2": 0.0042,
-    "yayinim": 0.8,
-    "gorus_faktoru": 0.15,
-    "uzay_sicakligi_K": 200.0,
-    "zaman_adimi_s": 15.0,
-    "max_gorev_suresi_s": 10800.0,
-    "basinc_Torr": [
+    "mass_kg": 0.15,
+    "specific_heat_J_kgK": 460.0,
+    "surface_area_m2": 0.0042,
+    "emissivity": 0.8,
+    "view_factor": 0.15,
+    "space_temperature_K": 200.0,
+    "time_step_s": 15.0,
+    "max_task_duration_s": 10800.0,
+    "pressure_Torr": [
       1e-06,
       0.01
     ],
-    "h_referans_W_m2K": 8.5,
-    "basinc_yarim_Torr": 1.0,
-    "tutma_torku_mNm": 90.0,
-    "kose_frekansi_PPS": 1800.0,
-    "nominal_voltaj_V": 9.0,
-    "tork_derating_1_K": 0.0035,
-    "surtunme_taban_mNm": 4.0,
-    "surtunme_kazanci_mNm": 14.0,
-    "sabit_yuk_mNm": 8.0,
-    "T_sigmoid_merkez_C": 100.0,
-    "T_sigmoid_egim": 4.0,
-    "T_kapi_C": 80.0,
-    "S_sigmoid_merkez": 0.95,
-    "S_sigmoid_egim": 0.07,
-    "S_kapi": 0.75,
-    "V_kritik_V": 5.8,
-    "I_kritik_A": 0.35,
-    "p_voltaj": 0.8,
-    "etiket_gurultusu": 0.05,
-    "termistor_sigma_C": 1.5,
-    "tork_sigma": 0.02,
-    "profil_agirliklari": [
+    "h_reference_W_m2K": 8.5,
+    "pressure_half_Torr": 1.0,
+    "holding_torque_mNm": 90.0,
+    "corner_frequency_PPS": 1800.0,
+    "nominal_voltage_V": 9.0,
+    "torque_derating_1_K": 0.0035,
+    "friction_base_mNm": 4.0,
+    "friction_gain_mNm": 14.0,
+    "static_load_mNm": 8.0,
+    "T_sigmoid_center_C": 100.0,
+    "T_sigmoid_slope": 4.0,
+    "T_door_C": 80.0,
+    "S_sigmoid_center": 0.95,
+    "S_sigmoid_slope": 0.07,
+    "S_door": 0.75,
+    "V_critical_V": 5.8,
+    "I_critical_A": 0.35,
+    "p_voltage": 0.8,
+    "label_noise": 0.05,
+    "thermistor_sigma_C": 1.5,
+    "torque_sigma": 0.02,
+    "profile_weights": [
       0.5,
       0.2,
       0.18,
       0.12
     ],
-    "profil_adlari": [
+    "profile_names": [
       "Nominal",
-      "Termal_Yuk",
-      "Mekanik_Yuk",
-      "Guc_Anomalisi"
+      "Thermal_Load",
+      "Mechanical_Load",
+      "Power_Anomaly"
     ]
   },
-  "sinif_dagilimi": [
+  "class_distribution": [
     6761,
     1812,
     816,
     611
   ],
-  "profil_dagilimi": [
+  "profile_distribution": [
     5015,
     2043,
     1775,
     1167
   ],
-  "etiket_gurultusu_hedef": 500,
-  "etiket_gurultusu_gerceklesen": 371,
-  "bayes_tavani_etiket_gurultusuz": 0.9168,
-  "bayes_tavani_etiket_gurultulu": 0.8834,
-  "sicaklik_C": {
+  "label_noise_target": 500,
+  "label_noise_actual": 371,
+  "bayes_ceiling_label_noise_free": 0.9168,
+  "bayes_ceiling_label_noisy": 0.8834,
+  "temperature_C": {
     "min": -48.8,
     "max": 289.1,
-    "ort": 48.3
+    "mean": 48.3
   },
-  "tork_stres": {
+  "torque_stress": {
     "min": 0.147,
     "max": 2.488,
-    "ort": 0.486
+    "mean": 0.486
   },
-  "latent_degiskenler": [
-    "baski_yogunlugu",
-    "yaglayici_bozunmasi",
-    "R_iletim_K_W",
-    "gorev_suresi_s"
+  "latent_variables": [
+    "print_density",
+    "lubricant_degradation",
+    "R_conduction_K_W",
+    "task_duration_s"
   ]
 }

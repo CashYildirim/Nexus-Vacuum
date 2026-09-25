@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+*.pyo
+nexus_vakum_veri.csv
+nexus_vakum_config.json
+02_sonuclar.json
+nexus_model.pkl
+model_sutunlari.pkl
+.streamlit/
+.vscode/
+.idea/

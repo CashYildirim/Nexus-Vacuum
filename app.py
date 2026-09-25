@@ -1,39 +1,6 @@
-"""
-NEXUS-VAKUM | Adim 4: Duzeltilmis canli telemetri paneli
-=========================================================
-ESKI app.py'DEKI KRITIK TUTARSIZLIKLAR
 
-  Konu              | Eski egitim ureteci        | Eski app.py
-  ------------------|----------------------------|---------------------------
-  Sicaklik modeli   | (P_kayip*yogunluk)         | P_kayip * 11.2
-                    |   *(1.5-P*100)*12.5        | yogunluk ve vakum YOK
-  Etiketleme        | stokastik sigmoid          | SERT ESIK (100 / .75 / 5.5)
-  Ortam sicakligi   | -50 .. 80 C                | -10 .. 60 C
-  Voltaj            | 5.0 .. 9.5 V               | 5.2 .. 9.5 V
-  Pencere           | makalede N=500             | kodda [-30:]
-  Min/Max           | -                          | KUMULATIF gecmis
-
-Yani model, egitildiginden BASKA bir etiketleme kuralina karsi
-olculuyordu. Makaledeki "%88.5 - %93.2 canli dogruluk" bu yuzden
-gecersizdi. Ustelik min/max kumulatif oldugu icin raporlanan aralik,
-panelin kac dakika acik kaldiginin fonksiyonuydu.
-
-BU SURUMDE
-  * Fizik ve etiketleme 01_veri_uretimi.py'den AYNEN ithal ediliyor.
-    Tek kaynak ilkesi: simulasyon mantigi tek yerde tanimli.
-  * GERCEK kayan pencere (deque, maxsize=N).
-  * Binom guven araligi bandi da cizdiriliyor; boylece dalgalanmanin
-    ornekleme gurultusu oldugu gorsel olarak belli oluyor.
-  * Belirsizlik kapisi (guven < esik -> otonom karar askiya alinir)
-    ayri bir metrik olarak izleniyor.
-  * Gecmis sinirli; bellek sizintisi yok.
-
-Calistirma : streamlit run 04_app.py
-Gereksinim : 01_veri_uretimi.py ayni klasorde, nexus_model.pkl egitilmis
-"""
 
 from collections import deque
-
 import time
 import numpy as np
 import pandas as pd
@@ -43,99 +10,92 @@ import joblib
 import importlib.util
 from pathlib import Path
 
-# --- Tum yollar bu dosyanin bulundugu klasore gore cozulur. ---
-# Boylece streamlit'i hangi dizinden calistirdiginiz onemli olmaz.
-BURASI = Path(__file__).resolve().parent
-_ADAYLAR = ["01_veri_uretimi.py", "veriuretimi.py", "veri_uretimi.py"]
-URETEC = next((BURASI / a for a in _ADAYLAR if (BURASI / a).exists()), None)
-MODEL_YOLU = BURASI / "nexus_model.pkl"
-SUTUN_YOLU = BURASI / "model_sutunlari.pkl"
+# --- Resolve all paths relative to this script's directory ---
+HERE = Path(__file__).resolve().parent
+_CANDIDATES = ["01_create_data.py", "veriuretimi.py", "veri_uretimi.py"]
+GENERATOR_PATH = next((HERE / a for a in _CANDIDATES if (HERE / a).exists()), None)
+MODEL_PATH = HERE / "nexus_model.pkl"
+COLUMN_PATH = HERE / "model_columns.pkl"
 
-if URETEC is None:
+if GENERATOR_PATH is None:
     st.error(
-        f"Ureteç dosyasi bulunamadi. Su klasorde arandi: {BURASI}\n\n"
-        f"Aranan adlar: {_ADAYLAR}\n\n"
-        "Ureteç dosyasinin adini degistirdiyseniz, bu dosyadaki "
-        "_ADAYLAR listesine ekleyin ya da bu betikle AYNI klasore "
-        "kopyalayin."
+        f"Data generator file not found. Searched in: {HERE}\n\n"
+        f"Searched names: {_CANDIDATES}\n\n"
+        "If you changed the generator file name, add it to _CANDIDATES "
+        "or copy it to the SAME directory as this script."
     )
     st.stop()
 
-spec = importlib.util.spec_from_file_location("gen", URETEC)
+spec = importlib.util.spec_from_file_location("gen", GENERATOR_PATH)
 gen = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(gen)
 
 SIGMA_SB = gen.SIGMA_SB
 CFG = gen.CFG
-SINIFLAR = ["NORMAL", "THERMAL OVERHEATING", "STEP LOSS", "VOLTAGE DROP"]
+CLASSES = ["NORMAL", "THERMAL OVERHEATING", "STEP LOSS", "VOLTAGE DROP"]
 
-PENCERE = 500          # makalede raporlanan deger ile AYNI olmali
-GUVEN_ESIGI = 0.80
-YENILEME_SANIYE = 1.0  # ekrani okunabilir/ekran-goruntusu-alinabilir yapar
+WINDOW_SIZE = 500       # Sliding window size
+CONFIDENCE_THRESHOLD = 0.80
+REFRESH_RATE_SEC = 1.0  # Refresh delay for display stability
 
 st.set_page_config(page_title="NEXUS-VAKUM", page_icon="*", layout="wide")
 st.title("NEXUS-VAKUM: Autonomous Space Manufacturing Robot")
 st.caption("Visual telemetry and predictive maintenance panel "
-           f"| sliding window N={PENCERE} | confidence gate {GUVEN_ESIGI}")
+           f"| sliding window N={WINDOW_SIZE} | confidence gate {CONFIDENCE_THRESHOLD}")
 
 
-# Oznitelik sirasi. model_sutunlari.pkl okunamazsa bu kullanilir,
-# boylece 'sutunlar' HER DURUMDA tanimli olur (NameError imkansiz).
-VARSAYILAN_SUTUNLAR = [
-    "Ortam_Sicakligi_C", "Vakum_Basinci_Torr", "Calisma_Voltaji_V",
-    "Faz_Akimi_A", "Faz_Direnci_Ohm", "Motor_Hizi_PPS",
-    "Hesaplanan_Sicaklik_C", "Tork_Stres_Katsayisi",
+# Default feature order (Used if model_sutunlari.pkl cannot be read)
+DEFAULT_COLUMNS = [
+    "Ambient_Temperature_C", "Vacuum_Pressure_Torr", "Operating_Voltage_V",
+    "Phase_Current_A", "Phase_Resistance_Ohm", "Motor_Speed_PPS",
+    "Calculated_Temperature_C", "Torque_Stress_Coefficient",
 ]
 
 
 @st.cache_resource
-def model_yukle():
-    if not MODEL_YOLU.exists():
+def load_model():
+    if not MODEL_PATH.exists():
         raise FileNotFoundError(
-            f"{MODEL_YOLU} yok. Once su sirayla calistirin:\n"
-            "  python 01_veri_uretimi.py\n"
-            "  python 02_taban_cizgisi.py"
+            f"{MODEL_PATH} not found. Please run scripts in order:\n"
+            "  python 01_create_data.py\n"
+            "  python 02_baseline.py"
         )
-    m = joblib.load(MODEL_YOLU)
-    sut = joblib.load(SUTUN_YOLU) if SUTUN_YOLU.exists() \
-        else list(VARSAYILAN_SUTUNLAR)
-    return m, list(sut)
+    m = joblib.load(MODEL_PATH)
+    cols = joblib.load(COLUMN_PATH) if COLUMN_PATH.exists() else list(DEFAULT_COLUMNS)
+    return m, list(cols)
 
 
-# Hata YUTULMUYOR: sorun varsa mesaji gosterip calismayi durduruyoruz,
-# ama asla tanimsiz degiskenle devam etmiyoruz.
-model, sutunlar = None, list(VARSAYILAN_SUTUNLAR)
+model, columns = None, list(DEFAULT_COLUMNS)
 try:
-    model, sutunlar = model_yukle()
-except Exception as hata:
-    st.error(f"Model yuklenemedi.\n\n{type(hata).__name__}: {hata}")
+    model, columns = load_model()
+except Exception as err:
+    st.error(f"Failed to load model.\n\n{type(err).__name__}: {err}")
     st.stop()
 
 if model is None:
-    st.error("Model yuklenemedi.")
+    st.error("Model could not be loaded.")
     st.stop()
 
-# Egitimde kullanilan sutunlarla uretilen telemetri uyusuyor mu?
-_eksik = set(sutunlar) - set(VARSAYILAN_SUTUNLAR)
-if _eksik:
+# Check feature column alignment
+_missing = set(columns) - set(DEFAULT_COLUMNS)
+if _missing:
     st.error(
-        "Kaydedilmis model, bu ureteçin uretmedigi ozniteliklere ihtiyac "
-        f"duyuyor: {sorted(_eksik)}\n\n"
-        "Muhtemel sebep: elinizdeki nexus_model.pkl ESKI kodla egitilmis. "
-        "Silip 02_taban_cizgisi.py'yi tekrar calistirin."
+        "Saved model requires features not produced by the generator: "
+        f"{sorted(_missing)}\n\n"
+        "Likely cause: nexus_model.pkl was trained with older code. "
+        "Delete it and re-run 02_baseline.py."
     )
     st.stop()
 
 
-def tek_ornek(rng):
-    """01_veri_uretimi.py ile AYNI fizik ve AYNI etiketleme.
-    Tek fark: N=1 ve gorev suresi kisaltilmis entegrasyon."""
+def generate_single_sample(rng):
+    """Generates a single telemetry sample aligned with 01_create_data.py physics."""
     cfg = CFG
-    prof = rng.choice(4, p=cfg["profil_agirliklari"])
+    prof = rng.choice(4, p=cfg["profile_weights"])
     U = lambda a, b: rng.uniform(a, b)
 
     par = [
-        # ortam,      voltaj,      akim,        direnc,     pps
+        # ambient,   voltage,     current,     resistance, pps
         ((-50, 30), (6.8, 9.5), (.20, .34), (9, 16), (100, 1400),
          (.10, .45), (2, 6), (80, 220), (600, 3600)),
         ((20, 80), (6.5, 9.5), (.34, .45), (15, 20), (300, 1800),
@@ -146,125 +106,125 @@ def tek_ornek(rng):
          (.20, .70), (2, 5), (80, 300), (600, 5400)),
     ][prof]
 
-    ortam = U(*par[0]); voltaj = U(*par[1]); akim = U(*par[2])
-    direnc = U(*par[3]); pps = U(*par[4])
-    yogunluk = U(*par[5])
-    yaglayici = rng.beta(*par[6])
-    R_il = U(*par[7]); sure = U(*par[8])
-    basinc = 10 ** rng.uniform(*np.log10(cfg["basinc_Torr"]))
+    ambient = U(*par[0]); voltage = U(*par[1]); current = U(*par[2])
+    resistance = U(*par[3]); pps = U(*par[4])
+    print_density = U(*par[5])
+    lubricant = rng.beta(*par[6])
+    R_conduction = U(*par[7]); duration = U(*par[8])
+    pressure = 10 ** rng.uniform(*np.log10(cfg["pressure_Torr"]))
 
-    # --- gecici rejim termal entegrasyon ---
-    mc = cfg["kutle_kg"] * cfg["ozgul_isi_J_kgK"]
-    A = cfg["yuzey_alani_m2"]
-    epsF = cfg["yayinim"] * cfg["gorus_faktoru"]
-    dt = cfg["zaman_adimi_s"]
-    h = cfg["h_referans_W_m2K"] * basinc / (basinc + cfg["basinc_yarim_Torr"])
-    Q = (akim ** 2) * direnc * yogunluk
-    T0 = ortam + 273.15
+    # --- Transient thermal integration ---
+    mc = cfg["mass_kg"] * cfg["specific_heat_J_kgK"]
+    A = cfg["surface_area_m2"]
+    epsF = cfg["emissivity"] * cfg["view_factor"]
+    dt = cfg["time_step_s"]
+    h = cfg["h_reference_W_m2K"] * pressure / (pressure + cfg["pressure_half_Torr"])
+    Q = (current ** 2) * resistance * print_density
+    T0 = ambient + 273.15
     T = T0
-    for k in range(int(sure / dt)):
-        T += dt * (Q - epsF * SIGMA_SB * A * (T ** 4 - cfg["uzay_sicakligi_K"] ** 4)
-                   - h * A * (T - T0) - (T - T0) / R_il) / mc
+    for k in range(int(duration / dt)):
+        T += dt * (Q - epsF * SIGMA_SB * A * (T ** 4 - cfg["space_temperature_K"] ** 4)
+                   - h * A * (T - T0) - (T - T0) / R_conduction) / mc
     C = T - 273.15
 
-    # --- tork ---
-    der = np.clip(1 - cfg["tork_derating_1_K"] * max(C - 25, 0), 0.25, 1.0)
-    vf = np.clip(voltaj / cfg["nominal_voltaj_V"], 0.4, 1.0)
-    pullout = (cfg["tutma_torku_mNm"] * der * vf
-               / np.sqrt(1 + (pps / cfg["kose_frekansi_PPS"]) ** 2))
-    surt = (cfg["surtunme_taban_mNm"] + cfg["surtunme_kazanci_mNm"]
-            * yaglayici * (1 + 0.004 * max(C - 25, 0)))
-    ts = (cfg["sabit_yuk_mNm"] + surt + 5 * yogunluk) / max(pullout, 1e-3)
+    # --- Torque ---
+    der = np.clip(1 - cfg["torque_derating_1_K"] * max(C - 25, 0), 0.25, 1.0)
+    vf = np.clip(voltage / cfg["nominal_voltage_V"], 0.4, 1.0)
+    pullout = (cfg["holding_torque_mNm"] * der * vf
+               / np.sqrt(1 + (pps / cfg["corner_frequency_PPS"]) ** 2))
+    friction = (cfg["friction_base_mNm"] + cfg["friction_gain_mNm"]
+                * lubricant * (1 + 0.004 * max(C - 25, 0)))
+    ts = (cfg["static_load_mNm"] + friction + 5 * print_density) / max(pullout, 1e-3)
 
-    # --- AYNI olasiliksal etiketleme ---
-    p_t = (1 / (1 + np.exp(-(C - cfg["T_sigmoid_merkez_C"]) / cfg["T_sigmoid_egim"]))
-           if C > cfg["T_kapi_C"] else 0.0)
-    p_s = (1 / (1 + np.exp(-(ts - cfg["S_sigmoid_merkez"]) / cfg["S_sigmoid_egim"]))
-           if ts > cfg["S_kapi"] else 0.0)
-    p_v = (cfg["p_voltaj"] if (voltaj < cfg["V_kritik_V"]
-                               and akim > cfg["I_kritik_A"]) else 0.0)
+    # --- Probabilistic labeling ---
+    p_t = (1 / (1 + np.exp(-(C - cfg["T_sigmoid_center_C"]) / cfg["T_sigmoid_slope"]))
+           if C > cfg["T_door_C"] else 0.0)
+    p_s = (1 / (1 + np.exp(-(ts - cfg["S_sigmoid_center"]) / cfg["S_sigmoid_slope"]))
+           if ts > cfg["S_door"] else 0.0)
+    p_v = (cfg["p_voltage"] if (voltage < cfg["V_critical_V"]
+                               and current > cfg["I_critical_A"]) else 0.0)
     P = np.array([max(1 - max(p_t, p_s, p_v), 0.0), p_t, p_s, p_v])
     P = P / P.sum()
-    etiket = int(rng.choice(4, p=P))
-    if rng.random() < cfg["etiket_gurultusu"]:
-        etiket = int(rng.integers(0, 4))
+    label = int(rng.choice(4, p=P))
+    if rng.random() < cfg["label_noise"]:
+        label = int(rng.integers(0, 4))
 
-    satir = {
-        "Ortam_Sicakligi_C": ortam, "Vakum_Basinci_Torr": basinc,
-        "Calisma_Voltaji_V": voltaj, "Faz_Akimi_A": akim,
-        "Faz_Direnci_Ohm": direnc, "Motor_Hizi_PPS": pps,
-        "Hesaplanan_Sicaklik_C": C + rng.normal(0, cfg["termistor_sigma_C"]),
-        "Tork_Stres_Katsayisi": ts + rng.normal(0, cfg["tork_sigma"]),
+    row = {
+        "Ambient_Temperature_C": ambient, "Vacuum_Pressure_Torr": pressure,
+        "Operating_Voltage_V": voltage, "Phase_Current_A": current,
+        "Phase_Resistance_Ohm": resistance, "Motor_Speed_PPS": pps,
+        "Calculated_Temperature_C": C + rng.normal(0, cfg["thermistor_sigma_C"]),
+        "Torque_Stress_Coefficient": ts + rng.normal(0, cfg["torque_sigma"]),
     }
-    return satir, etiket
+    return row, label
 
 
-# ---------------- oturum durumu: SINIRLI gecmis ----------------
-if "pencere" not in st.session_state:
-    st.session_state.pencere = deque(maxlen=PENCERE)   # (dogru_mu, guven)
-    st.session_state.egri = deque(maxlen=200)
+# ---------------- Session State: Bounded History ----------------
+if "window" not in st.session_state:
+    st.session_state.window = deque(maxlen=WINDOW_SIZE)   # (is_correct, confidence)
+    st.session_state.curve = deque(maxlen=200)
     st.session_state.rng = np.random.default_rng()
-    st.session_state.sayac = 0
-    st.session_state.askida = 0
+    st.session_state.counter = 0
+    st.session_state.suspended = 0
 
-canli = st.sidebar.checkbox("Live stream simulation", value=True)
+is_live = st.sidebar.checkbox("Live stream simulation", value=True)
 st.sidebar.markdown("---")
-kutu = st.sidebar.empty()
+info_box = st.sidebar.empty()
 
 c1, c2, c3, c4 = st.columns(4)
 g1, g2 = st.columns(2)
 
-if canli:
-    satir, gercek = tek_ornek(st.session_state.rng)
-    X = pd.DataFrame([satir])[sutunlar]
-    tahmin = int(model.predict(X)[0])
-    guven = float(model.predict_proba(X).max())
+if is_live:
+    row_data, actual_label = generate_single_sample(st.session_state.rng)
+    X = pd.DataFrame([row_data])[columns]
+    prediction = int(model.predict(X)[0])
+    confidence = float(model.predict_proba(X).max())
 
-    st.session_state.pencere.append((tahmin == gercek, guven))
-    st.session_state.sayac += 1
-    if guven < GUVEN_ESIGI:
-        st.session_state.askida += 1
+    st.session_state.window.append((prediction == actual_label, confidence))
+    st.session_state.counter += 1
+    if confidence < CONFIDENCE_THRESHOLD:
+        st.session_state.suspended += 1
 
-    c1.metric("Temperature", f"{satir['Hesaplanan_Sicaklik_C']:.1f} C")
-    c2.metric("Voltage", f"{satir['Calisma_Voltaji_V']:.2f} V")
-    c3.metric("Speed", f"{int(satir['Motor_Hizi_PPS'])} PPS")
-    c4.metric("Torque stress", f"{satir['Tork_Stres_Katsayisi']:.2f}")
+    c1.metric("Temperature", f"{row_data['Calculated_Temperature_C']:.1f} C")
+    c2.metric("Voltage", f"{row_data['Operating_Voltage_V']:.2f} V")
+    c3.metric("Speed", f"{int(row_data['Motor_Speed_PPS'])} PPS")
+    c4.metric("Torque Stress", f"{row_data['Torque_Stress_Coefficient']:.2f}")
 
-    if guven < GUVEN_ESIGI:
+    if confidence < CONFIDENCE_THRESHOLD:
         st.warning(f"HOLD - autonomous action suspended "
-                   f"(confidence {guven*100:.1f}% < {GUVEN_ESIGI*100:.0f}%) "
-                   f"| provisional: {SINIFLAR[tahmin]}")
+                   f"(confidence {confidence*100:.1f}% < {CONFIDENCE_THRESHOLD*100:.0f}%) "
+                   f"| provisional: {CLASSES[prediction]}")
     else:
-        st.success(f"{SINIFLAR[tahmin]}  |  confidence {guven*100:.1f}%")
+        st.success(f"{CLASSES[prediction]}  |  confidence {confidence*100:.1f}%")
 
-    # ---- GERCEK kayan pencere ----
-    dogru = np.array([d for d, _ in st.session_state.pencere])
-    n = len(dogru)
-    if n >= 30:
-        acc = dogru.mean()
-        sigma = np.sqrt(acc * (1 - acc) / n)
-        st.session_state.egri.append(acc)
-        kutu.info(
-            f"**Sliding-window accuracy (N={n})**\n\n"
-            f"* Point estimate: %{acc*100:.2f}\n"
-            f"* 95% CI: [%{(acc-1.96*sigma)*100:.2f}, "
-            f"%{(acc+1.96*sigma)*100:.2f}]\n"
+    # ---- Real Sliding Window ----
+    correct_array = np.array([is_corr for is_corr, _ in st.session_state.window])
+    n_samples = len(correct_array)
+    if n_samples >= 30:
+        accuracy = correct_array.mean()
+        sigma = np.sqrt(accuracy * (1 - accuracy) / n_samples)
+        st.session_state.curve.append(accuracy)
+        info_box.info(
+            f"**Sliding-window accuracy (N={n_samples})**\n\n"
+            f"* Point estimate: %{accuracy*100:.2f}\n"
+            f"* 95% CI: [%{(accuracy-1.96*sigma)*100:.2f}, "
+            f"%{(accuracy+1.96*sigma)*100:.2f}]\n"
             f"* Expected binomial sigma: %{sigma*100:.2f}\n\n"
             f"**Uncertainty gate**\n\n"
-            f"* Suspended: {st.session_state.askida}/"
-            f"{st.session_state.sayac} "
-            f"(%{100*st.session_state.askida/st.session_state.sayac:.1f})"
+            f"* Suspended: {st.session_state.suspended}/"
+            f"{st.session_state.counter} "
+            f"(%{100*st.session_state.suspended/st.session_state.counter:.1f})"
         )
         with g1:
             st.write("### Sliding-window accuracy")
-            st.line_chart(pd.DataFrame({"accuracy": list(st.session_state.egri)}))
+            st.line_chart(pd.DataFrame({"accuracy": list(st.session_state.curve)}))
     else:
-        kutu.info(f"Filling window... {n}/30")
+        info_box.info(f"Filling window... {n_samples}/30")
 
     with g2:
         st.write("### Confidence distribution")
         st.line_chart(pd.DataFrame(
-            {"confidence": [g for _, g in st.session_state.pencere]}))
+            {"confidence": [conf for _, conf in st.session_state.window]}))
 
-    time.sleep(YENILEME_SANIYE)
+    time.sleep(REFRESH_RATE_SEC)
     st.rerun()
